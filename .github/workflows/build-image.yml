@@ -87,6 +87,14 @@ jobs:
         with:
           cosign-release: v2.6.3
 
+      - name: Login to GHCR for Cosign
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Sign image with GitHub OIDC
         if: github.event_name != 'pull_request'
         shell: bash
