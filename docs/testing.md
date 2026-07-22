@@ -18,3 +18,7 @@ Run `scripts/hardware-check.sh`, then verify each item on real hardware.
 
 Do not promote the image from prerelease while any boot, display, input, audio,
 or rollback check is failing.
+
+Installer ISO tests are destructive. Disconnect unrelated drives, verify the
+target device immediately before booting the installer, and keep a recovery
+USB plus a backup of all user data.

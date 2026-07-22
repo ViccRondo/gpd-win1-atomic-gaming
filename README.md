@@ -88,6 +88,10 @@ split it into sub-2 GB parts and attach them to an existing GitHub Release.
 Concatenate the numbered parts in order, then verify `DISK-SHA256SUMS` before
 extracting. Each Release also includes a short `DISK-README.txt` command guide.
 
+> **Destructive installer warning:** `anaconda-iso` is an experimental install
+> image and may automatically repartition the first disk it finds. Use it only
+> on a backed-up GPD Win 1 or spare test system, and disconnect unrelated drives.
+
 ## Current limitations
 
 - Native SteamOS MangoApp crashes on this graphics stack; the project ships an

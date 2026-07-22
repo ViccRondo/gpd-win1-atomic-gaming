@@ -100,6 +100,10 @@ jobs:
             "$archive" "${archive}.part-"
           sha256sum "${archive}.part-"* > DISK-PARTS-SHA256SUMS
           cat > DISK-README.txt <<EOF
+          WARNING: anaconda-iso is an experimental installer image. It may
+          automatically repartition and erase the first disk it finds. Test on
+          spare hardware only, disconnect unrelated drives, and keep backups.
+
           Reassemble the compressed install image:
             cat ${archive}.part-* > ${archive}
 
