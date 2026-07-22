@@ -1,0 +1,91 @@
+#!/usr/bin/python3
+import logging
+import os
+import pwd
+import struct
+import subprocess
+import time
+
+DEVICE = "/dev/input/by-path/platform-gpio-keys.1.auto-event"
+EVENT = struct.Struct("llHHi")
+EV_KEY = 0x01
+KEY_MUTE = 113
+KEY_VOLUMEDOWN = 114
+KEY_VOLUMEUP = 115
+
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+
+def active_user():
+    result = subprocess.run(
+        ["/usr/bin/loginctl", "show-seat", "seat0", "-p", "ActiveSession", "--value"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    session = result.stdout.strip()
+    if not session:
+        return None
+    result = subprocess.run(
+        ["/usr/bin/loginctl", "show-session", session, "-p", "User", "--value"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    try:
+        uid = int(result.stdout.strip())
+        return pwd.getpwuid(uid)
+    except (ValueError, KeyError):
+        return None
+
+
+def wpctl(*args):
+    user = active_user()
+    if user is None:
+        logging.warning("no active seat0 user")
+        return
+    command = [
+        "/usr/bin/runuser",
+        "-u",
+        user.pw_name,
+        "--",
+        "/usr/bin/env",
+        f"HOME={user.pw_dir}",
+        f"XDG_RUNTIME_DIR=/run/user/{user.pw_uid}",
+        f"DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{user.pw_uid}/bus",
+        "/usr/bin/wpctl",
+        *args,
+    ]
+    result = subprocess.run(command, check=False, capture_output=True, text=True)
+    if result.returncode:
+        logging.warning("wpctl failed: %s", result.stderr.strip())
+
+
+def handle_key(code):
+    if code == KEY_VOLUMEUP:
+        wpctl("set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@", "5%+")
+    elif code == KEY_VOLUMEDOWN:
+        wpctl("set-volume", "@DEFAULT_AUDIO_SINK@", "5%-")
+    elif code == KEY_MUTE:
+        wpctl("set-mute", "@DEFAULT_AUDIO_SINK@", "toggle")
+
+
+def main():
+    while True:
+        try:
+            with open(DEVICE, "rb", buffering=0) as device:
+                logging.info("watching %s", DEVICE)
+                while True:
+                    data = device.read(EVENT.size)
+                    if len(data) != EVENT.size:
+                        raise OSError("short input event read")
+                    _sec, _usec, event_type, code, value = EVENT.unpack(data)
+                    if event_type == EV_KEY and value in (1, 2):
+                        handle_key(code)
+        except (FileNotFoundError, OSError) as error:
+            logging.warning("input device unavailable: %s", error)
+            time.sleep(2)
+
+
+if __name__ == "__main__":
+    main()

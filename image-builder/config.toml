@@ -1,0 +1,8 @@
+[customizations.iso]
+volume_id = "WIN1GAMING"
+application_id = "GPD Win 1 Atomic Gaming"
+publisher = "GPD Win 1 Atomic Gaming contributors"
+
+[[customizations.filesystem]]
+mountpoint = "/"
+minsize = "32 GiB"

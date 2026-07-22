@@ -1,0 +1,85 @@
+#!/usr/bin/python3
+import struct
+import subprocess
+import time
+from pathlib import Path
+
+EVENT = struct.Struct("llHHI")
+EV_SW = 0x05
+SW_LID = 0x00
+RESUME_MARKER = Path("/run/win1-last-resume")
+PRE_SLEEP_STATE = Path("/run/win1-lid-before-sleep")
+LID_STATE = str(Path(__file__).resolve().with_name("win1-lid-state"))
+
+
+def find_lid_event():
+    for event in Path("/sys/class/input").glob("event*"):
+        try:
+            if (event / "device/name").read_text().strip() == "Lid Switch":
+                return Path("/dev/input") / event.name
+        except OSError:
+            continue
+    return None
+
+
+def is_recent_open_lid_resume():
+    try:
+        before = PRE_SLEEP_STATE.read_text().strip()
+        age = time.time() - RESUME_MARKER.stat().st_mtime
+        return before == "open" and -1 <= age <= 8
+    except OSError:
+        return False
+
+
+def previous_suspend_finished():
+    result = subprocess.run(
+        ["systemctl", "is-active", "systemd-suspend.service"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    return result.stdout.strip() not in {"active", "activating", "deactivating"}
+
+
+def current_lid_state():
+    result = subprocess.run(
+        [LID_STATE],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    return result.stdout.strip()
+
+
+while True:
+    device = find_lid_event()
+    if device is None:
+        time.sleep(2)
+        continue
+    try:
+        with device.open("rb", buffering=0) as stream:
+            while True:
+                data = stream.read(EVENT.size)
+                if len(data) != EVENT.size:
+                    break
+                _sec, _usec, event_type, code, value = EVENT.unpack(data)
+                if event_type == EV_SW and code == SW_LID and value == 1:
+                    # The close event can arrive before systemd-sleep finishes
+                    # its post hooks and writes the resume marker.
+                    time.sleep(1)
+                    if is_recent_open_lid_resume():
+                        print(
+                            "lid close woke an open-lid suspend; waiting for resume",
+                            flush=True,
+                        )
+                        for _ in range(90):
+                            if previous_suspend_finished():
+                                break
+                            time.sleep(0.5)
+                        if previous_suspend_finished() and current_lid_state() == "closed":
+                            print("lid is still closed; returning to sleep", flush=True)
+                            subprocess.run(["systemctl", "suspend"], check=False)
+    except OSError:
+        time.sleep(1)

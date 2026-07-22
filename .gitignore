@@ -1,0 +1,8 @@
+.DS_Store
+node_modules/
+decky/win1-performance/dist/*.map
+output/
+*.iso
+*.raw
+*.qcow2
+cosign.key

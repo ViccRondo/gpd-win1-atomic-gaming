@@ -1,0 +1,110 @@
+#!/usr/bin/bash
+set -euo pipefail
+
+export XDG_SESSION_TYPE=wayland
+export XDG_SESSION_DESKTOP=gamescope
+export XDG_CURRENT_DESKTOP=gamescope
+export SteamDeck=1
+export STEAM_GAMESCOPE_SESSION=1
+
+systemctl --user import-environment \
+    DISPLAY WAYLAND_DISPLAY XAUTHORITY \
+    XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP XDG_SESSION_TYPE \
+    SteamDeck STEAM_GAMESCOPE_SESSION 2>/dev/null || true
+dbus-update-activation-environment --systemd \
+    DISPLAY WAYLAND_DISPLAY XAUTHORITY \
+    XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP XDG_SESSION_TYPE \
+    SteamDeck STEAM_GAMESCOPE_SESSION 2>/dev/null || true
+
+systemctl --user stop plasma-workspace.target 2>/dev/null || true
+pkill -TERM -x plasmashell 2>/dev/null || true
+
+# The internal panel is natively portrait (720x1280). KWin performs the GPU
+# rotation, while the nested compositor always receives landscape 1280x720.
+for _ in {1..20}; do
+    if kscreen-doctor -j >/dev/null 2>&1; then
+        kscreen-doctor \
+            output.DSI-1.enable \
+            output.DSI-1.rotation.right \
+            output.DSI-1.scale.1.8 >/dev/null 2>&1 || true
+        break
+    fi
+    sleep 0.25
+done
+
+# 1024 frames avoided underruns on the tested device without the latency of
+# 2048. Restore PipeWire's default quantum when the session exits.
+pw-metadata -n settings 0 clock.force-quantum 1024 >/dev/null 2>&1 || true
+
+cleanup() {
+    if [[ -n "${power_watcher_pid:-}" ]]; then
+        kill "$power_watcher_pid" 2>/dev/null || true
+        wait "$power_watcher_pid" 2>/dev/null || true
+    fi
+    pw-metadata -n settings 0 clock.force-quantum 0 >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+steam_data_dir="$HOME/.var/app/com.valvesoftware.Steam/.local/share/Steam"
+reboot_sentinel="$steam_data_dir/.steamos-reboot-sentinel"
+shutdown_sentinel="$steam_data_dir/.steamos-shutdown-sentinel"
+export STEAMOS_STEAM_REBOOT_SENTINEL="/var/home/$USER/.steam/steam/.steamos-reboot-sentinel"
+export STEAMOS_STEAM_SHUTDOWN_SENTINEL="/var/home/$USER/.steam/steam/.steamos-shutdown-sentinel"
+
+rm -f "$reboot_sentinel" "$shutdown_sentinel"
+
+watch_power_requests() {
+    while true; do
+        if [[ -e "$reboot_sentinel" ]]; then
+            rm -f "$reboot_sentinel"
+            logger -t win1-gaming-session "Steam requested system reboot"
+            systemctl reboot
+            return
+        fi
+        if [[ -e "$shutdown_sentinel" ]]; then
+            rm -f "$shutdown_sentinel"
+            logger -t win1-gaming-session "Steam requested system poweroff"
+            systemctl poweroff
+            return
+        fi
+        sleep 0.2
+    done
+}
+
+watch_power_requests &
+power_watcher_pid=$!
+
+# Do not add --mangoapp here. MangoApp 0.8.3/0.8.4 currently crashes on the
+# tested Cherryview stack. The optional Decky plugin controls injected MangoHud.
+gamescope \
+    --backend wayland \
+    --fullscreen \
+    --borderless \
+    --steam \
+    --expose-wayland \
+    --force-composition \
+    --force-windows-fullscreen \
+    --xwayland-count 2 \
+    --output-width 1280 \
+    --output-height 720 \
+    --nested-width 1280 \
+    --nested-height 720 \
+    --nested-refresh 60 \
+    --hide-cursor-delay 0 \
+    -- \
+    flatpak run \
+        --env=PATH="/var/home/$USER/.steam/steam/win1-system-bin:/app/bin:/app/utils/bin:/usr/bin" \
+        --env=SteamDeck=1 \
+        --env=STEAM_GAMESCOPE_SESSION=1 \
+        com.valvesoftware.Steam \
+        -gamepadui \
+        -steamos3 \
+        -cef-use-gl=egl
+
+if [[ -e "$reboot_sentinel" ]]; then
+    rm -f "$reboot_sentinel"
+    systemctl reboot
+elif [[ -e "$shutdown_sentinel" ]]; then
+    rm -f "$shutdown_sentinel"
+    systemctl poweroff
+fi

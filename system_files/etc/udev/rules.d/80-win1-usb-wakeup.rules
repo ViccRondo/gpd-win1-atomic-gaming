@@ -1,0 +1,5 @@
+# The internal keyboard/mouse and gamepad share this xHCI controller.
+# ACPI lid and power buttons remain wake sources; USB wake makes xHCI return
+# EBUSY during s2idle on the tested GPD Win 1.
+SUBSYSTEM=="pci", KERNEL=="0000:00:14.0", ATTR{power/wakeup}="disabled"
+SUBSYSTEM=="usb", ATTR{idVendor}=="0603", ATTR{idProduct}=="0002", ATTR{power/wakeup}="disabled"

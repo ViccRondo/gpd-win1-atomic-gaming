@@ -1,0 +1,13 @@
+#!/usr/bin/sh
+
+STATE_FILE=/run/win1-lid-before-sleep
+LID_STATE=/usr/libexec/win1-lid-state
+
+case "$1" in
+    pre)
+        "$LID_STATE" > "$STATE_FILE" 2>/dev/null || printf '%s\n' unknown > "$STATE_FILE"
+        ;;
+    post)
+        touch /run/win1-last-resume
+        ;;
+esac

@@ -1,0 +1,12 @@
+[Unit]
+Description=Handle delayed GPD Win 1 lid events after s2idle resume
+After=systemd-udevd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/win1-lid-event-guard
+Restart=always
+RestartSec=1s
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,107 @@
+name: Build installable disk image
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: GHCR image tag to convert
+        required: true
+        default: latest
+      image_type:
+        description: bootc-image-builder output type
+        required: true
+        type: choice
+        options:
+          - raw
+          - qcow2
+          - anaconda-iso
+      release_tag:
+        description: Optional existing GitHub Release tag to receive split image assets
+        required: false
+        type: string
+
+concurrency:
+  group: disk-${{ inputs.image_tag }}-${{ inputs.image_type }}
+  cancel-in-progress: false
+
+jobs:
+  build-disk:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+
+      - name: Maximize build space
+        uses: ublue-os/remove-unwanted-software@695eb75bc387dbcd9685a8e72d23439d8686cba6
+
+      - name: Login and pull image
+        shell: bash
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login \
+            --username "${{ github.actor }}" \
+            --password-stdin ghcr.io
+          sudo podman pull "ghcr.io/${owner}/gpd-win1-atomic-gaming:${{ inputs.image_tag }}"
+
+      - name: Build disk image
+        shell: bash
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          mkdir -p output
+          sudo podman run \
+            --rm \
+            --privileged \
+            --pull=newer \
+            --security-opt label=type:unconfined_t \
+            --volume "${PWD}/image-builder/config.toml:/config.toml:ro" \
+            --volume "${PWD}/output:/output" \
+            --volume /var/lib/containers/storage:/var/lib/containers/storage \
+            quay.io/centos-bootc/bootc-image-builder:latest \
+            --type "${{ inputs.image_type }}" \
+            --use-librepo=True \
+            "ghcr.io/${owner}/gpd-win1-atomic-gaming:${{ inputs.image_tag }}"
+
+      - name: Compress output
+        id: archive
+        shell: bash
+        run: |
+          archive="gpd-win1-atomic-gaming-${{ inputs.image_tag }}-${{ inputs.image_type }}.tar.zst"
+          tar --zstd -cf "$archive" output
+          sha256sum "$archive" > SHA256SUMS
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+
+      - name: Split image for GitHub Release
+        if: inputs.release_tag != ''
+        shell: bash
+        run: |
+          archive="${{ steps.archive.outputs.archive }}"
+          split --bytes=1900M --numeric-suffixes=1 --suffix-length=2 \
+            "$archive" "${archive}.part-"
+          sha256sum "${archive}.part-"* > PARTS-SHA256SUMS
+
+      - name: Upload image to GitHub Release
+        if: inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          archive="${{ steps.archive.outputs.archive }}"
+          gh release upload "${{ inputs.release_tag }}" \
+            "${archive}.part-"* SHA256SUMS PARTS-SHA256SUMS \
+            --clobber
+
+      - name: Upload disk image
+        if: inputs.release_tag == ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gpd-win1-${{ inputs.image_tag }}-${{ inputs.image_type }}
+          path: |
+            *.tar.zst
+            SHA256SUMS
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14

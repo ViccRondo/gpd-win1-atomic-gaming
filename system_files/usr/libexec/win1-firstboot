@@ -1,0 +1,47 @@
+#!/usr/bin/bash
+set -euo pipefail
+
+state_dir=/var/lib/win1-gaming
+mkdir -p "$state_dir"
+
+user_name="$(getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 { print $1; exit }')"
+if [[ -z "$user_name" ]]; then
+    echo "No regular user exists yet; first-boot setup will retry." >&2
+    exit 1
+fi
+
+user_home="$(getent passwd "$user_name" | cut -d: -f6)"
+user_uid="$(id -u "$user_name")"
+
+install -d -m 0755 /etc/plasmalogin.conf.d
+cat > /etc/plasmalogin.conf.d/20-win1-gaming.conf <<EOF
+[Autologin]
+Relogin=false
+Session=win1-gaming.desktop
+User=$user_name
+EOF
+
+runuser -u "$user_name" -- env \
+    HOME="$user_home" \
+    XDG_RUNTIME_DIR="/run/user/$user_uid" \
+    flatpak remote-add --user --if-not-exists flathub \
+    https://flathub.org/repo/flathub.flatpakrepo
+
+runuser -u "$user_name" -- env \
+    HOME="$user_home" \
+    XDG_RUNTIME_DIR="/run/user/$user_uid" \
+    flatpak install --user --noninteractive --or-update flathub com.valvesoftware.Steam
+
+steam_runtime="$(runuser -u "$user_name" -- env HOME="$user_home" \
+    flatpak info --user --show-runtime com.valvesoftware.Steam 2>/dev/null || true)"
+runtime_branch="${steam_runtime##*/}"
+if [[ -n "$runtime_branch" ]]; then
+    runuser -u "$user_name" -- env HOME="$user_home" \
+        flatpak install --user --noninteractive --or-update flathub \
+        "org.freedesktop.Platform.VulkanLayer.MangoHud//$runtime_branch"
+fi
+
+runuser -u "$user_name" -- env HOME="$user_home" \
+    flatpak override --user --env=MANGOHUD=1 com.valvesoftware.Steam
+
+touch "$state_dir/configured"

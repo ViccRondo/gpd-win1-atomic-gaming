@@ -1,0 +1,13 @@
+[Unit]
+Description=Configure GPD Win 1 gaming mode for the first regular user
+After=network-online.target systemd-user-sessions.service
+Wants=network-online.target
+ConditionPathExists=!/var/lib/win1-gaming/configured
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/win1-firstboot
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

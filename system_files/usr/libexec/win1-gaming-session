@@ -1,0 +1,18 @@
+#!/usr/bin/bash
+set -euo pipefail
+
+export XDG_SESSION_TYPE=wayland
+export XDG_SESSION_DESKTOP=win1-gaming
+export XDG_CURRENT_DESKTOP=Win1Gaming
+export KDE_FULL_SESSION=false
+
+libexec_dir="$(cd -- "$(dirname -- "$0")" && pwd)"
+
+# KWin owns the portrait DSI panel. Direct Gamescope DRM scanout cannot rotate
+# this Cherryview panel reliably and has produced black frames/atomic failures.
+exec kwin_wayland \
+    --drm \
+    --xwayland \
+    --no-lockscreen \
+    --no-kactivities \
+    --exit-with-session "$libexec_dir/win1-gaming-session-child"

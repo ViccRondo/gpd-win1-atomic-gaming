@@ -1,0 +1,24 @@
+#!/usr/bin/python3
+import fcntl
+from pathlib import Path
+
+
+def find_lid_event():
+    for event in Path("/sys/class/input").glob("event*"):
+        try:
+            if (event / "device/name").read_text().strip() == "Lid Switch":
+                return Path("/dev/input") / event.name
+        except OSError:
+            continue
+    raise SystemExit("unknown")
+
+
+bits = bytearray(8)
+ev_ioc_g_sw = (2 << 30) | (len(bits) << 16) | (ord("E") << 8) | 0x1B
+try:
+    with find_lid_event().open("rb", buffering=0) as device:
+        fcntl.ioctl(device, ev_ioc_g_sw, bits, True)
+except (OSError, SystemExit):
+    raise SystemExit("unknown")
+
+print("closed" if bits[0] & 1 else "open")

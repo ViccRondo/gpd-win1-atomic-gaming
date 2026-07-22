@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=GPD Win 1 Gaming Mode
+Comment=Controller-first KWin plus nested Gamescope session for GPD Win 1
+Exec=/usr/libexec/plasma-dbus-run-session-if-needed /usr/libexec/win1-gaming-session
+TryExec=/usr/libexec/win1-gaming-session
+DesktopNames=Win1Gaming

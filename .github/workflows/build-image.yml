@@ -1,0 +1,132 @@
+name: Build and release image
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    tags: ["v*"]
+  schedule:
+    - cron: "17 7 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE_NAME: gpd-win1-atomic-gaming
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+
+      - name: Maximize build space
+        uses: ublue-os/remove-unwanted-software@695eb75bc387dbcd9685a8e72d23439d8686cba6
+
+      - name: Select image tag
+        id: vars
+        shell: bash
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          image="${REGISTRY}/${owner}/${IMAGE_NAME}"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            tag="${GITHUB_REF_NAME}"
+          elif [[ "${GITHUB_REF_NAME}" == "main" ]]; then
+            tag="latest"
+          else
+            tag="pr-${{ github.event.pull_request.number }}"
+          fi
+          {
+            echo "image=${image}"
+            echo "tag=${tag}"
+            echo "short_sha=${GITHUB_SHA::12}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build bootc image
+        shell: bash
+        run: |
+          sudo podman build \
+            --format oci \
+            --file Containerfile \
+            --tag "localhost/${IMAGE_NAME}:${{ steps.vars.outputs.tag }}" \
+            .
+
+      - name: Login to GHCR
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | sudo podman login \
+            --username "${{ github.actor }}" \
+            --password-stdin "${REGISTRY}"
+
+      - name: Push immutable and channel tags
+        if: github.event_name != 'pull_request'
+        id: push
+        shell: bash
+        run: |
+          source_ref="localhost/${IMAGE_NAME}:${{ steps.vars.outputs.tag }}"
+          image="${{ steps.vars.outputs.image }}"
+          sudo podman push --digestfile /tmp/digest "${source_ref}" "${image}:${{ steps.vars.outputs.tag }}"
+          sudo podman push "${source_ref}" "${image}:sha-${{ steps.vars.outputs.short_sha }}"
+          digest="$(< /tmp/digest)"
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+
+      - name: Install Cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6
+        with:
+          cosign-release: v2.6.3
+
+      - name: Sign image with GitHub OIDC
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          cosign sign --yes \
+            "${{ steps.vars.outputs.image }}@${{ steps.push.outputs.digest }}"
+
+      - name: Build release bundle
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          mkdir -p release
+          tar --exclude=node_modules --exclude=.git \
+            -czf "release/${IMAGE_NAME}-${{ steps.vars.outputs.tag }}-adaptation.tar.gz" \
+            system_files decky scripts docs LICENSE README.md
+          sha256sum release/*.tar.gz > release/SHA256SUMS
+          cat > release/IMAGE.txt <<EOF
+          Image: ${{ steps.vars.outputs.image }}:${{ steps.vars.outputs.tag }}
+          Digest: ${{ steps.push.outputs.digest }}
+          Immutable reference: ${{ steps.vars.outputs.image }}@${{ steps.push.outputs.digest }}
+
+          Experimental rebase:
+            sudo bootc switch ${{ steps.vars.outputs.image }}:${{ steps.vars.outputs.tag }}
+          EOF
+
+      - name: Upload build metadata
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: image-${{ steps.vars.outputs.tag }}
+          path: release/
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh release create "${GITHUB_REF_NAME}" release/* \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            --prerelease

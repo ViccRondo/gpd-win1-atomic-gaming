@@ -1,0 +1,10 @@
+{
+  "name": "Win1 性能面板",
+  "author": "GPD Win 1 Atomic Gaming contributors",
+  "flags": ["_root"],
+  "api_version": 1,
+  "publish": {
+    "tags": ["mangohud", "performance", "gpd"],
+    "description": "Control the GPD Win 1 MangoHud performance overlay from Decky."
+  }
+}
