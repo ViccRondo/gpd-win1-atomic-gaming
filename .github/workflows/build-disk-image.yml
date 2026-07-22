@@ -62,6 +62,7 @@ jobs:
             --volume /var/lib/containers/storage:/var/lib/containers/storage \
             quay.io/centos-bootc/bootc-image-builder:latest \
             --type "${{ inputs.image_type }}" \
+            --rootfs btrfs \
             --use-librepo=True \
             "ghcr.io/${owner}/gpd-win1-atomic-gaming:${{ inputs.image_tag }}"
 
