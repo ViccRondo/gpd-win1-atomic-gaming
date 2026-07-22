@@ -47,6 +47,21 @@ jobs:
             --password-stdin ghcr.io
           sudo podman pull "ghcr.io/${owner}/gpd-win1-atomic-gaming:${{ inputs.image_tag }}"
 
+      - name: Extract source repository keys
+        shell: bash
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          image="ghcr.io/${owner}/gpd-win1-atomic-gaming:${{ inputs.image_tag }}"
+          key_dir="${PWD}/image-builder/source-rpm-gpg"
+          mkdir -p "$key_dir"
+          container="$(sudo podman create "$image")"
+          cleanup() {
+            sudo podman rm --force "$container" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          sudo podman cp "${container}:/etc/pki/rpm-gpg/." "$key_dir/"
+          sudo chown -R "$(id -u):$(id -g)" "$key_dir"
+
       - name: Build disk image
         shell: bash
         run: |
@@ -58,6 +73,7 @@ jobs:
             --pull=newer \
             --security-opt label=type:unconfined_t \
             --volume "${PWD}/image-builder/config.toml:/config.toml:ro" \
+            --volume "${PWD}/image-builder/source-rpm-gpg:/etc/pki/rpm-gpg:ro" \
             --volume "${PWD}/output:/output" \
             --volume /var/lib/containers/storage:/var/lib/containers/storage \
             quay.io/centos-bootc/bootc-image-builder:latest \
