@@ -3,7 +3,6 @@ set -euo pipefail
 
 dnf5 install -y \
     flatpak \
-    gamescope \
     kscreen \
     mangohud \
     pipewire-utils \
