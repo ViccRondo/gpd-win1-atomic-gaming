@@ -88,7 +88,7 @@ jobs:
         run: |
           archive="gpd-win1-atomic-gaming-${{ inputs.image_tag }}-${{ inputs.image_type }}.tar.zst"
           tar --zstd -cf "$archive" output
-          sha256sum "$archive" > SHA256SUMS
+          sha256sum "$archive" > DISK-SHA256SUMS
           echo "archive=$archive" >> "$GITHUB_OUTPUT"
 
       - name: Split image for GitHub Release
@@ -98,7 +98,17 @@ jobs:
           archive="${{ steps.archive.outputs.archive }}"
           split --bytes=1900M --numeric-suffixes=1 --suffix-length=2 \
             "$archive" "${archive}.part-"
-          sha256sum "${archive}.part-"* > PARTS-SHA256SUMS
+          sha256sum "${archive}.part-"* > DISK-PARTS-SHA256SUMS
+          cat > DISK-README.txt <<EOF
+          Reassemble the compressed install image:
+            cat ${archive}.part-* > ${archive}
+
+          Verify it before extracting:
+            sha256sum -c DISK-SHA256SUMS
+
+          Extract the bootc-image-builder output directory:
+            tar --zstd -xf ${archive}
+          EOF
 
       - name: Upload image to GitHub Release
         if: inputs.release_tag != ''
@@ -108,7 +118,8 @@ jobs:
         run: |
           archive="${{ steps.archive.outputs.archive }}"
           gh release upload "${{ inputs.release_tag }}" \
-            "${archive}.part-"* SHA256SUMS PARTS-SHA256SUMS \
+            "${archive}.part-"* DISK-SHA256SUMS DISK-PARTS-SHA256SUMS \
+            DISK-README.txt \
             --clobber
 
       - name: Upload disk image
@@ -118,7 +129,7 @@ jobs:
           name: gpd-win1-${{ inputs.image_tag }}-${{ inputs.image_type }}
           path: |
             *.tar.zst
-            SHA256SUMS
+            DISK-SHA256SUMS
           compression-level: 0
           if-no-files-found: error
           retention-days: 14

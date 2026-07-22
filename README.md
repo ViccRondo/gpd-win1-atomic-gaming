@@ -85,7 +85,8 @@ when a `v*` tag is pushed.
 OCI tag into `raw`, `qcow2`, or `anaconda-iso` output with
 bootc-image-builder. It can retain the result as a 14-day Actions artifact or
 split it into sub-2 GB parts and attach them to an existing GitHub Release.
-Verify `SHA256SUMS` after recombining the parts.
+Concatenate the numbered parts in order, then verify `DISK-SHA256SUMS` before
+extracting. Each Release also includes a short `DISK-README.txt` command guide.
 
 ## Current limitations
 

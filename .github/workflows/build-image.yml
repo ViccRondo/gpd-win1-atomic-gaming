@@ -110,7 +110,7 @@ jobs:
           tar --exclude=node_modules --exclude=.git \
             -czf "release/${IMAGE_NAME}-${{ steps.vars.outputs.tag }}-adaptation.tar.gz" \
             system_files decky scripts docs LICENSE README.md
-          sha256sum release/*.tar.gz > release/SHA256SUMS
+          sha256sum release/*.tar.gz > release/ADAPTATION-SHA256SUMS
           cat > release/IMAGE.txt <<EOF
           Image: ${{ steps.vars.outputs.image }}:${{ steps.vars.outputs.tag }}
           Digest: ${{ steps.push.outputs.digest }}
