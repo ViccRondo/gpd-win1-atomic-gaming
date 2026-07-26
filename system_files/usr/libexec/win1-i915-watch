@@ -1,0 +1,18 @@
+#!/usr/bin/bash
+set -eu
+
+/usr/bin/dmesg --follow-new --color=never |
+while IFS= read -r line; do
+    case "$line" in
+        *"i915 "*"flip_done timed out"*|\
+        *"i915 "*"commit wait timed out"*|\
+        *"vblank wait timed out on crtc"*)
+            logger -p daemon.crit -t win1-i915-watch \
+                "DSI pipeline failure detected; syncing and forcing reboot"
+            sync
+            sleep 1
+            /usr/sbin/reboot -f
+            exit 0
+            ;;
+    esac
+done

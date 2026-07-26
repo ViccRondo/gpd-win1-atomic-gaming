@@ -1,15 +1,15 @@
 #!/usr/bin/bash
-set -euo pipefail
+set -u
 
 export XDG_SESSION_TYPE=wayland
 export XDG_SESSION_DESKTOP=win1-gaming
 export XDG_CURRENT_DESKTOP=Win1Gaming
 export KDE_FULL_SESSION=false
 
+# KWin owns the portrait DSI panel. Direct Gamescope DRM scanout and nested
+# Gamescope were both tested on Cherryview; direct scanout produced black or
+# corrupt frames, while nesting added too much latency and CPU/RAM overhead.
 libexec_dir="$(cd -- "$(dirname -- "$0")" && pwd)"
-
-# KWin owns the portrait DSI panel. Direct Gamescope DRM scanout cannot rotate
-# this Cherryview panel reliably and has produced black frames/atomic failures.
 exec kwin_wayland \
     --drm \
     --xwayland \

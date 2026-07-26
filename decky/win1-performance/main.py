@@ -138,6 +138,50 @@ class Plugin:
     async def get_level(self) -> int:
         return self._read_level()
 
+    async def set_brightness(self, value: float):
+        """Apply Steam's normalized quick-access brightness value."""
+        try:
+            value = float(value)
+            backlights = sorted(glob.glob("/sys/class/backlight/*"))
+            if not backlights:
+                return {"ok": False, "message": "No display backlight was found"}
+
+            backlight = backlights[0]
+            with open(
+                os.path.join(backlight, "max_brightness"),
+                "r",
+                encoding="ascii",
+            ) as handle:
+                maximum = int(handle.read().strip())
+
+            value = max(0.0, min(1.0, value))
+            brightness = max(1, min(maximum, round(value * maximum)))
+            helpers = (
+                "/usr/local/libexec/win1-brightness-write",
+                "/usr/libexec/win1-brightness-write",
+            )
+            helper = next((path for path in helpers if os.path.isfile(path)), None)
+            if helper is None:
+                raise OSError("win1-brightness-write is not installed")
+
+            process = await asyncio.create_subprocess_exec(
+                "/usr/bin/sudo",
+                "-n",
+                helper,
+                os.path.join(backlight, "brightness"),
+                str(brightness),
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await process.communicate()
+            if process.returncode != 0:
+                message = stderr.decode("utf-8", errors="replace").strip()
+                raise OSError(message or f"brightness helper exited {process.returncode}")
+            return {"ok": True, "brightness": brightness, "maximum": maximum}
+        except (OSError, TypeError, ValueError) as error:
+            decky.logger.warning("Could not set display brightness: %s", error)
+            return {"ok": False, "message": str(error)}
+
     async def set_level(self, level: int):
         level = int(level)
         if level < 0 or level > 4:

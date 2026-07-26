@@ -6,7 +6,7 @@ COPY decky /decky
 FROM ghcr.io/ublue-os/bazzite:stable
 
 LABEL org.opencontainers.image.title="GPD Win 1 Atomic Gaming"
-LABEL org.opencontainers.image.description="Experimental GPD Win 1 gaming-mode adaptation using KWin and nested Gamescope"
+LABEL org.opencontainers.image.description="Experimental GPD Win 1 direct-KWin Steam gaming-mode adaptation"
 LABEL org.opencontainers.image.source="https://github.com/ViccRondo/gpd-win1-atomic-gaming"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 

@@ -9,9 +9,52 @@ import { useEffect, useState } from "react";
 import { FaChartLine } from "react-icons/fa";
 
 type Result = { ok: boolean; level: number; message: string };
+type BrightnessResult = {
+  ok: boolean;
+  brightness?: number;
+  maximum?: number;
+  message?: string;
+};
+type BrightnessRegistration = { unregister?: () => void };
 
 const getLevel = callable<[], number>("get_level");
 const setLevel = callable<[number], Result>("set_level");
+const setBrightness = callable<[number], BrightnessResult>("set_brightness");
+
+let brightnessRegistration: BrightnessRegistration | undefined;
+let brightnessTimer: ReturnType<typeof setTimeout> | undefined;
+let lastBrightness: number | undefined;
+
+function applyBrightness(value: unknown) {
+  const normalized = Number(value);
+  if (!Number.isFinite(normalized) || normalized === lastBrightness) return;
+  lastBrightness = normalized;
+  if (brightnessTimer) clearTimeout(brightnessTimer);
+  brightnessTimer = setTimeout(() => {
+    setBrightness(normalized).catch((error) => {
+      console.warn("[Win1] brightness bridge failed", error);
+    });
+  }, 40);
+}
+
+function startBrightnessBridge() {
+  brightnessRegistration?.unregister?.();
+  const steamClient = (window as typeof window & {
+    SteamClient?: {
+      System?: {
+        Display?: {
+          RegisterForBrightnessChanges?: (
+            callback: (event: { flBrightness: number }) => void,
+          ) => BrightnessRegistration;
+        };
+      };
+    };
+  }).SteamClient;
+  brightnessRegistration =
+    steamClient?.System?.Display?.RegisterForBrightnessChanges?.((event) =>
+      applyBrightness(event.flBrightness),
+    );
+}
 
 const options = [
   { data: 0, label: "关闭" },
@@ -65,5 +108,10 @@ export default definePlugin(() => ({
   titleView: <div className={staticClasses.Title}>Win1 性能面板</div>,
   content: <Content />,
   icon: <FaChartLine />,
-  onDismount() {},
+  onDismount() {
+    brightnessRegistration?.unregister?.();
+    if (brightnessTimer) clearTimeout(brightnessTimer);
+  },
 }));
+
+startBrightnessBridge();

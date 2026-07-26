@@ -1,0 +1,18 @@
+#!/usr/bin/bash
+set -eu
+
+if [[ $# -ne 1 ]]; then
+    exit 64
+fi
+
+case "$1" in
+    reboot)
+        exec /usr/bin/systemctl reboot
+        ;;
+    poweroff)
+        exec /usr/bin/systemctl poweroff
+        ;;
+    *)
+        exit 65
+        ;;
+esac

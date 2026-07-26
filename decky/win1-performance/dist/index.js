@@ -85,6 +85,29 @@ function FaChartLine (props) {
 
 const getLevel = callable("get_level");
 const setLevel = callable("set_level");
+const setBrightness = callable("set_brightness");
+let brightnessRegistration;
+let brightnessTimer;
+let lastBrightness;
+function applyBrightness(value) {
+    const normalized = Number(value);
+    if (!Number.isFinite(normalized) || normalized === lastBrightness)
+        return;
+    lastBrightness = normalized;
+    if (brightnessTimer)
+        clearTimeout(brightnessTimer);
+    brightnessTimer = setTimeout(() => {
+        setBrightness(normalized).catch((error) => {
+            console.warn("[Win1] brightness bridge failed", error);
+        });
+    }, 40);
+}
+function startBrightnessBridge() {
+    brightnessRegistration?.unregister?.();
+    const steamClient = window.SteamClient;
+    brightnessRegistration =
+        steamClient?.System?.Display?.RegisterForBrightnessChanges?.((event) => applyBrightness(event.flBrightness));
+}
 const options = [
     { data: 0, label: "关闭" },
     { data: 1, label: "仅 FPS" },
@@ -121,8 +144,13 @@ var index = definePlugin(() => ({
     titleView: SP_JSX.jsx("div", { className: DFL.staticClasses.Title, children: "Win1 \u6027\u80FD\u9762\u677F" }),
     content: SP_JSX.jsx(Content, {}),
     icon: SP_JSX.jsx(FaChartLine, {}),
-    onDismount() { },
+    onDismount() {
+        brightnessRegistration?.unregister?.();
+        if (brightnessTimer)
+            clearTimeout(brightnessTimer);
+    },
 }));
+startBrightnessBridge();
 
 export { index as default };
 //# sourceMappingURL=index.js.map

@@ -1,0 +1,36 @@
+#!/usr/bin/bash
+set -eu
+
+if [[ $# -ne 2 ]]; then
+    exit 64
+fi
+
+requested_path=$1
+value=$2
+
+case "$requested_path" in
+    /sys/class/backlight/*/brightness) ;;
+    *) exit 65 ;;
+esac
+
+target=$(readlink -f -- "$requested_path")
+case "$target" in
+    /sys/devices/*/brightness) ;;
+    *) exit 66 ;;
+esac
+
+device_directory=${target%/brightness}
+if [[ ! -r "$device_directory/max_brightness" ]]; then
+    exit 66
+fi
+
+if [[ ! "$value" =~ ^[0-9]+$ ]]; then
+    exit 67
+fi
+
+maximum=$(<"$device_directory/max_brightness")
+if (( value < 0 || value > maximum )); then
+    exit 68
+fi
+
+printf '%s\n' "$value" > "$target"

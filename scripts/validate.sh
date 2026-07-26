@@ -12,9 +12,13 @@ bash -n scripts/hardware-check.sh
 bash -n scripts/validate.sh
 bash -n system_files/usr/libexec/win1-gaming-session
 bash -n system_files/usr/libexec/win1-gaming-session-child
+bash -n system_files/usr/libexec/win1-brightness-write
 bash -n system_files/usr/libexec/win1-firstboot
+bash -n system_files/usr/libexec/win1-i915-watch
+bash -n system_files/usr/libexec/win1-power-action
 bash -n system_files/etc/systemd/system-sleep/50-win1-lid-guard
 python3 -m py_compile \
+    system_files/usr/libexec/win1-decky-hotkey \
     system_files/usr/libexec/win1-lid-event-guard \
     system_files/usr/libexec/win1-lid-state \
     system_files/usr/libexec/win1-volume-keys \

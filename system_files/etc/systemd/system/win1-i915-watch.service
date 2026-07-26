@@ -1,0 +1,12 @@
+[Unit]
+Description=Optional GPD Win 1 i915 DSI failure watchdog
+After=systemd-journald.service
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/win1-i915-watch
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,12 @@
+[Unit]
+Description=Open Decky over games with the GPD Win 1 F11 key
+After=plasmalogin.service
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/win1-decky-hotkey
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

@@ -1,7 +1,7 @@
 {
   "name": "win1-performance",
-  "version": "0.1.0",
-  "description": "Decky control for the GPD Win 1 MangoHud overlay",
+  "version": "0.2.0",
+  "description": "Decky control for GPD Win 1 MangoHud and brightness",
   "type": "module",
   "scripts": {
     "build": "rollup -c"
