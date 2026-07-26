@@ -153,8 +153,10 @@ SteamOS 的使用方式，但不是 SteamOS 原生 overlay plane。
 sudo ./scripts/install.sh --user "$USER" --enable-i915-watchdog
 ```
 
-它在日志检测到特定 i915/DSI 超时后强制重启机器，可能避免永久黑屏，但会让
-未保存的数据丢失。它不能修复 GPU 驱动，也不能保证游戏状态在睡眠后恢复。
+它在日志检测到特定 i915/DSI 超时后保存内核和显示寄存器快照，再强制重启
+机器。诊断记录保存在 `/var/lib/win1-i915-diagnostics`。看门狗可能避免永久
+黑屏，但会让未保存的数据丢失；它不能修复 GPU 驱动，也不能保证游戏状态在
+睡眠后恢复。
 
 ## 验证安装
 

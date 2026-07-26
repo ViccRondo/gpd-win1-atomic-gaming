@@ -1,6 +1,40 @@
 #!/usr/bin/bash
 set -eu
 
+capture_root=/var/lib/win1-i915-diagnostics
+
+capture_failure() {
+    local trigger_line=$1
+    local stamp capture_dir debug_root file
+
+    stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+    capture_dir="$capture_root/$stamp"
+    install -d -m 0700 "$capture_dir"
+
+    printf '%s\n' "$trigger_line" > "$capture_dir/trigger.txt"
+    printf '%s\n' "$(cat /proc/sys/kernel/random/boot_id)" \
+        > "$capture_dir/boot-id.txt"
+    uname -a > "$capture_dir/uname.txt"
+    cat /proc/cmdline > "$capture_dir/cmdline.txt"
+    timeout 8 journalctl -b -k -o short-monotonic --no-pager \
+        > "$capture_dir/kernel-journal.txt" 2>&1 || true
+
+    debug_root=/sys/kernel/debug/dri/0000:00:02.0
+    for file in \
+        i915_display_info \
+        i915_engine_info \
+        i915_error_state \
+        i915_frequency_info \
+        i915_power_domain_info; do
+        if [[ -r "$debug_root/$file" ]]; then
+            timeout 3 cat "$debug_root/$file" \
+                > "$capture_dir/$file.txt" 2>&1 || true
+        fi
+    done
+
+    sync
+}
+
 /usr/bin/dmesg --follow-new --color=never |
 while IFS= read -r line; do
     case "$line" in
@@ -8,8 +42,10 @@ while IFS= read -r line; do
         *"i915 "*"commit wait timed out"*|\
         *"vblank wait timed out on crtc"*)
             logger -p daemon.crit -t win1-i915-watch \
-                "DSI pipeline failure detected; syncing and forcing reboot"
-            sync
+                "DSI pipeline failure detected; saving diagnostics"
+            capture_failure "$line"
+            logger -p daemon.crit -t win1-i915-watch \
+                "Diagnostics saved under $capture_root; forcing reboot"
             sleep 1
             /usr/sbin/reboot -f
             exit 0

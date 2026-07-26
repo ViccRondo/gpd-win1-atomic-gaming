@@ -23,6 +23,19 @@ sudo journalctl -b -u win1-lid-event-guard > ~/win1-lid-current-boot.log
 A hard power cycle may be the only recovery from a complete i915 hang and will
 lose unsaved data.
 
+If the optional i915 watchdog detected the failure before rebooting, it stores
+one directory per incident:
+
+```bash
+sudo ls -la /var/lib/win1-i915-diagnostics
+sudo cp -a /var/lib/win1-i915-diagnostics "$HOME/"
+sudo chown -R "$USER:$USER" "$HOME/win1-i915-diagnostics"
+```
+
+Each incident includes the triggering DRM error, boot ID, kernel command line,
+full kernel journal, and any i915 display, engine, error-state, frequency, and
+power-domain snapshots that remained readable.
+
 ## Decky 插件导致卡死
 
 先停用 Decky Loader，将可疑插件移出活动目录，再启动 Decky。以下命令专门隔离
