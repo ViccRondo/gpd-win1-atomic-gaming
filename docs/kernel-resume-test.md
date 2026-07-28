@@ -27,7 +27,10 @@ The workflow applies:
 kernel/patches/0001-drm-i915-chv-retry-stalled-dsi-transcoder-enable.patch
 ```
 
-Download and extract the resulting workflow artifact on the GPD Win 1.
+Download and extract the resulting workflow artifact on the GPD Win 1. The
+artifact also contains the validated Gamescope and wlroots versions used by
+the diagnosed machine. The installer pins them so that creating the kernel
+deployment cannot silently introduce a gaming-session upgrade.
 
 ## Install
 
@@ -46,6 +49,10 @@ sudo systemctl reboot
 ```
 
 After reboot, verify that `uname -r` contains `win1`.
+
+Before rebooting, inspect `rpm-ostree status -v`. The staged deployment should
+show only the five kernel replacements; Gamescope must remain `3.16.23` and
+wlroots must remain `0.18.3`.
 
 The installer does not remove the current deployment. Keep the i915 watchdog
 enabled during testing so a failed resume still saves diagnostics and reboots.
@@ -86,4 +93,3 @@ or remove the kernel override and return to Fedora's kernel on the next boot:
 sudo ./scripts/reset-test-kernel.sh
 sudo systemctl reboot
 ```
-

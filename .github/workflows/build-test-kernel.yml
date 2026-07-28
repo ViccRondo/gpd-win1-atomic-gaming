@@ -96,6 +96,17 @@ jobs:
             fi
             cp "${matches[0]}" output/
           done
+
+          curl --fail --location --retry 4 \
+            --output output/gamescope-3.16.23-1.fc44.x86_64.rpm \
+            https://kojipkgs.fedoraproject.org/packages/gamescope/3.16.23/1.fc44/x86_64/gamescope-3.16.23-1.fc44.x86_64.rpm
+          curl --fail --location --retry 4 \
+            --output output/wlroots0.18-0.18.3-5.fc44.x86_64.rpm \
+            https://kojipkgs.fedoraproject.org/packages/wlroots0.18/0.18.3/5.fc44/x86_64/wlroots0.18-0.18.3-5.fc44.x86_64.rpm
+          rpmkeys --checksig \
+            output/gamescope-3.16.23-1.fc44.x86_64.rpm \
+            output/wlroots0.18-0.18.3-5.fc44.x86_64.rpm
+
           rpm -qp --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n' output/*.rpm \
             | sort > output/NEVRA.txt
           sha256sum output/*.rpm > output/SHA256SUMS

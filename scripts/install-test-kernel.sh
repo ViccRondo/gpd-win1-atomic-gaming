@@ -42,6 +42,10 @@ required=(
     kernel-modules-extra
 )
 declare -A selected=()
+optional_pins=(
+    gamescope
+    wlroots0.18
+)
 
 shopt -s nullglob
 for rpm_file in "$rpm_dir"/*.rpm; do
@@ -53,6 +57,15 @@ for rpm_file in "$rpm_dir"/*.rpm; do
                 exit 1
             fi
             selected[$required_name]=$rpm_file
+        fi
+    done
+    for optional_name in "${optional_pins[@]}"; do
+        if [[ $package_name == "$optional_name" ]]; then
+            if [[ -n ${selected[$optional_name]:-} ]]; then
+                echo "More than one $optional_name RPM was found." >&2
+                exit 1
+            fi
+            selected[$optional_name]=$rpm_file
         fi
     done
 done
@@ -74,7 +87,26 @@ done
 
 echo "Staging atomic kernel replacement:"
 rpm -qp --qf '  %{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n' "${rpms[@]}"
-rpm-ostree override replace "${rpms[@]}"
+
+transaction_options=()
+gamescope_rpm=${selected[gamescope]:-}
+wlroots_rpm=${selected[wlroots0.18]:-}
+if [[ -n $gamescope_rpm || -n $wlroots_rpm ]]; then
+    if [[ -z $gamescope_rpm || -z $wlroots_rpm ]]; then
+        echo "Both gamescope and wlroots0.18 pin RPMs are required." >&2
+        exit 1
+    fi
+    echo "Pinning the validated gaming-session baseline:"
+    rpm -qp --qf '  %{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n' \
+        "$gamescope_rpm" "$wlroots_rpm"
+    transaction_options+=(
+        --uninstall=gamescope
+        "--install=$gamescope_rpm"
+        "--install=$wlroots_rpm"
+    )
+fi
+
+rpm-ostree override replace "${transaction_options[@]}" "${rpms[@]}"
 
 echo
 echo "The test kernel is staged. The current deployment remains the rollback entry."
@@ -85,4 +117,3 @@ if $reboot_after; then
 else
     echo "Reboot when ready: sudo systemctl reboot"
 fi
-
