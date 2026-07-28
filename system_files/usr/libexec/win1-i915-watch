@@ -16,8 +16,10 @@ capture_failure() {
         > "$capture_dir/boot-id.txt"
     uname -a > "$capture_dir/uname.txt"
     cat /proc/cmdline > "$capture_dir/cmdline.txt"
-    timeout 8 journalctl -b -k -o short-monotonic --no-pager \
+    timeout 8 journalctl -b -k -n 5000 -o short-monotonic --no-pager \
         > "$capture_dir/kernel-journal.txt" 2>&1 || true
+    timeout 8 journalctl -b -n 1500 -o short-monotonic --no-pager \
+        > "$capture_dir/system-journal.txt" 2>&1 || true
 
     debug_root=/sys/kernel/debug/dri/0000:00:02.0
     for file in \
