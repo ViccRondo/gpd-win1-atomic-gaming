@@ -1,0 +1,110 @@
+name: Build GPD Win 1 test kernel
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_rpm_url:
+        description: Exact Fedora kernel source RPM used by the target
+        required: true
+        default: https://kojipkgs.fedoraproject.org/packages/kernel/6.19.10/300.fc44/src/kernel-6.19.10-300.fc44.src.rpm
+      build_suffix:
+        description: RPM build suffix
+        required: true
+        default: .win1.1
+
+concurrency:
+  group: win1-test-kernel-${{ inputs.build_suffix }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    container: fedora:44
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Install RPM build tooling
+        shell: bash
+        run: |
+          dnf install -y \
+            curl \
+            dnf-plugins-core \
+            fedora-packager \
+            rpm-build \
+            rpmdevtools
+
+      - name: Prepare exact Fedora source package
+        shell: bash
+        run: |
+          mkdir -p "${GITHUB_WORKSPACE}/rpmbuild"/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
+          curl --fail --location --retry 4 \
+            --output /tmp/kernel.src.rpm \
+            "${{ inputs.source_rpm_url }}"
+          rpmkeys --checksig /tmp/kernel.src.rpm
+          rpm -qp --qf '%{NAME}-%{VERSION}-%{RELEASE}.src\n' /tmp/kernel.src.rpm
+          rpm -ivh /tmp/kernel.src.rpm \
+            --define "_topdir ${GITHUB_WORKSPACE}/rpmbuild"
+          install -m 0644 \
+            kernel/patches/0001-drm-i915-chv-retry-stalled-dsi-transcoder-enable.patch \
+            "${GITHUB_WORKSPACE}/rpmbuild/SOURCES/linux-kernel-test.patch"
+
+      - name: Install kernel build dependencies
+        shell: bash
+        run: |
+          dnf builddep -y "${GITHUB_WORKSPACE}/rpmbuild/SPECS/kernel.spec"
+
+      - name: Build base kernel RPM set
+        shell: bash
+        run: |
+          rpmbuild -bb \
+            --define "_topdir ${GITHUB_WORKSPACE}/rpmbuild" \
+            --define "buildid ${{ inputs.build_suffix }}" \
+            --with baseonly \
+            --without debug \
+            --without debuginfo \
+            --without doc \
+            --without headers \
+            --without cross_headers \
+            --without perf \
+            --without tools \
+            --without selftests \
+            --without kabichk \
+            --without kabidwchk \
+            "${GITHUB_WORKSPACE}/rpmbuild/SPECS/kernel.spec"
+
+      - name: Collect atomic replacement set
+        shell: bash
+        run: |
+          mkdir -p output
+          for package in \
+            kernel \
+            kernel-core \
+            kernel-modules \
+            kernel-modules-core \
+            kernel-modules-extra; do
+            mapfile -t matches < <(
+              find rpmbuild/RPMS/x86_64 -maxdepth 1 -type f \
+                -name "${package}-[0-9]*.rpm"
+            )
+            if [[ ${#matches[@]} -ne 1 ]]; then
+              echo "Expected one ${package} RPM, found ${#matches[@]}" >&2
+              exit 1
+            fi
+            cp "${matches[0]}" output/
+          done
+          rpm -qp --qf '%{NAME}-%{VERSION}-%{RELEASE}.%{ARCH}\n' output/*.rpm \
+            | sort > output/NEVRA.txt
+          sha256sum output/*.rpm > output/SHA256SUMS
+
+      - name: Upload test kernel
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gpd-win1-test-kernel-${{ inputs.build_suffix }}
+          path: output/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14

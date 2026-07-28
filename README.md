@@ -158,6 +158,10 @@ sudo ./scripts/install.sh --user "$USER" --enable-i915-watchdog
 黑屏，但会让未保存的数据丢失；它不能修复 GPU 驱动，也不能保证游戏状态在
 睡眠后恢复。
 
+针对已经复现的 Cherryview DSI pipe B 唤醒故障，项目提供了一个可回滚的
+[测试内核补丁和验证流程](docs/kernel-resume-test.md)。它目前仍是实验修复，
+必须通过实机多轮睡眠测试后才能写入正式镜像。
+
 ## 验证安装
 
 ```bash

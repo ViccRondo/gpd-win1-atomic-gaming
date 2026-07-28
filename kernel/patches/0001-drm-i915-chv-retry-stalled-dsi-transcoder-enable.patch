@@ -1,0 +1,108 @@
+From b50d1e77e020fe7569b4400a3750f0ae80269d66 Mon Sep 17 00:00:00 2001
+From: GPD Win 1 project <noreply@example.com>
+Date: Tue, 28 Jul 2026 20:51:18 +0800
+Subject: [PATCH] drm/i915/chv: Retry stalled DSI transcoder enable
+
+A reproduced Cherryview DSI resume failure leaves the transcoder enable
+bit set while the scanline counter does not move. Atomic commits then
+time out waiting for flip_done.
+
+Wait for the scanline counter before enabling vblank handling. If it
+does not start on a Cherryview DSI output, toggle the still-plane-less
+transcoder once and retry. Other platforms and non-DSI outputs are
+unchanged.
+---
+ drivers/gpu/drm/i915/display/intel_display.c | 21 ++++++++++++++++++++
+ drivers/gpu/drm/i915/display/intel_vblank.c  |  8 +++++---
+ drivers/gpu/drm/i915/display/intel_vblank.h  |  2 +-
+ 3 files changed, 27 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/i915/display/intel_display.c b/drivers/gpu/drm/i915/display/intel_display.c
+index 144f232..c05a62a 100644
+--- a/drivers/gpu/drm/i915/display/intel_display.c
++++ b/drivers/gpu/drm/i915/display/intel_display.c
+@@ -24,6 +24,7 @@
+  *	Eric Anholt <eric@anholt.net>
+  */
+ 
++#include <linux/delay.h>
+ #include <linux/dma-resv.h>
+ #include <linux/i2c.h>
+ #include <linux/input.h>
+@@ -2047,6 +2048,26 @@ static void valleyview_crtc_enable(struct intel_atomic_state *state,
+ 	intel_initial_watermarks(state, crtc);
+ 	intel_enable_transcoder(new_crtc_state);
+ 
++	/*
++	 * On some Cherryview DSI systems the transcoder can report enabled
++	 * after resume without the scanline counter starting. The subsequent
++	 * atomic commit then waits forever for a vblank that cannot arrive.
++	 *
++	 * Planes are still disabled here, so it is safe to kick the
++	 * transcoder once before enabling vblank handling and the planes.
++	 */
++	if (display->platform.cherryview &&
++	    intel_crtc_has_type(new_crtc_state, INTEL_OUTPUT_DSI) &&
++	    !intel_wait_for_pipe_scanline_moving(crtc)) {
++		drm_warn(display->drm,
++			 "pipe %c failed to start; retrying transcoder enable\n",
++			 pipe_name(pipe));
++		intel_disable_transcoder(new_crtc_state);
++		usleep_range(1000, 2000);
++		intel_enable_transcoder(new_crtc_state);
++		intel_wait_for_pipe_scanline_moving(crtc);
++	}
++
+ 	intel_crtc_vblank_on(new_crtc_state);
+ 
+ 	intel_encoders_enable(state, crtc);
+diff --git a/drivers/gpu/drm/i915/display/intel_vblank.c b/drivers/gpu/drm/i915/display/intel_vblank.c
+index 671f357..ff31e3e 100644
+--- a/drivers/gpu/drm/i915/display/intel_vblank.c
++++ b/drivers/gpu/drm/i915/display/intel_vblank.c
+@@ -493,7 +493,7 @@ static bool pipe_scanline_is_moving(struct intel_display *display,
+ 	return line1 != line2;
+ }
+ 
+-static void wait_for_pipe_scanline_moving(struct intel_crtc *crtc, bool state)
++static bool wait_for_pipe_scanline_moving(struct intel_crtc *crtc, bool state)
+ {
+ 	struct intel_display *display = to_intel_display(crtc);
+ 	enum pipe pipe = crtc->pipe;
+@@ -508,6 +508,8 @@ static void wait_for_pipe_scanline_moving(struct intel_crtc *crtc, bool state)
+ 		drm_err(display->drm,
+ 			"pipe %c scanline %s wait timed out\n",
+ 			pipe_name(pipe), str_on_off(state));
++
++	return !ret;
+ }
+ 
+ void intel_wait_for_pipe_scanline_stopped(struct intel_crtc *crtc)
+@@ -515,9 +517,9 @@ void intel_wait_for_pipe_scanline_stopped(struct intel_crtc *crtc)
+ 	wait_for_pipe_scanline_moving(crtc, false);
+ }
+ 
+-void intel_wait_for_pipe_scanline_moving(struct intel_crtc *crtc)
++bool intel_wait_for_pipe_scanline_moving(struct intel_crtc *crtc)
+ {
+-	wait_for_pipe_scanline_moving(crtc, true);
++	return wait_for_pipe_scanline_moving(crtc, true);
+ }
+ 
+ static void intel_crtc_active_timings(struct drm_display_mode *mode,
+diff --git a/drivers/gpu/drm/i915/display/intel_vblank.h b/drivers/gpu/drm/i915/display/intel_vblank.h
+index 98d04ca..c472b18 100644
+--- a/drivers/gpu/drm/i915/display/intel_vblank.h
++++ b/drivers/gpu/drm/i915/display/intel_vblank.h
+@@ -39,7 +39,7 @@ bool intel_crtc_get_vblank_timestamp(struct drm_crtc *crtc, int *max_error,
+ 				     ktime_t *vblank_time, bool in_vblank_irq);
+ int intel_get_crtc_scanline(struct intel_crtc *crtc);
+ void intel_wait_for_pipe_scanline_stopped(struct intel_crtc *crtc);
+-void intel_wait_for_pipe_scanline_moving(struct intel_crtc *crtc);
++bool intel_wait_for_pipe_scanline_moving(struct intel_crtc *crtc);
+ void intel_crtc_update_active_timings(const struct intel_crtc_state *crtc_state,
+ 				      bool vrr_enable);
+ int intel_crtc_scanline_offset(const struct intel_crtc_state *crtc_state);
+-- 
+2.50.1 (Apple Git-155)
+
