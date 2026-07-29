@@ -1,0 +1,102 @@
+#!/usr/bin/python3
+"""Pause Steam's CEF UI while a Steam game is running."""
+
+import os
+import signal
+import time
+from pathlib import Path
+
+
+stopped = {}
+running = True
+
+
+def process_info(pid):
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_bytes().decode(
+            "utf-8", "replace"
+        )
+        end = stat.rfind(")")
+        fields = stat[end + 2 :].split()
+        start_time = fields[19]
+        name = (
+            Path(f"/proc/{pid}/comm")
+            .read_bytes()
+            .decode("utf-8", "replace")
+            .strip()
+        )
+        command = (
+            Path(f"/proc/{pid}/cmdline")
+            .read_bytes()
+            .replace(b"\0", b" ")
+            .decode("utf-8", "replace")
+        )
+        return start_time, name, command
+    except (FileNotFoundError, PermissionError, ProcessLookupError):
+        return None
+
+
+def processes():
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        pid = int(entry.name)
+        info = process_info(pid)
+        if info is not None:
+            yield pid, info
+
+
+def game_running(snapshot):
+    return any(
+        "reaper SteamLaunch AppId=" in command
+        for _pid, (_start_time, _name, command) in snapshot
+    )
+
+
+def stop_webhelpers(snapshot):
+    for pid, (start_time, name, _command) in snapshot:
+        if name != "steamwebhelper" or pid in stopped:
+            continue
+        try:
+            os.kill(pid, signal.SIGSTOP)
+            stopped[pid] = start_time
+        except ProcessLookupError:
+            pass
+
+
+def resume_webhelpers():
+    for pid, expected_start_time in list(stopped.items()):
+        info = process_info(pid)
+        if info is not None and info[0] == expected_start_time:
+            try:
+                os.kill(pid, signal.SIGCONT)
+            except ProcessLookupError:
+                pass
+        stopped.pop(pid, None)
+
+
+def request_stop(_signum, _frame):
+    global running
+    running = False
+
+
+def main():
+    signal.signal(signal.SIGTERM, request_stop)
+    signal.signal(signal.SIGINT, request_stop)
+    was_running = False
+    try:
+        while running:
+            snapshot = list(processes())
+            active = game_running(snapshot)
+            if active:
+                stop_webhelpers(snapshot)
+            elif was_running:
+                resume_webhelpers()
+            was_running = active
+            time.sleep(1)
+    finally:
+        resume_webhelpers()
+
+
+if __name__ == "__main__":
+    main()

@@ -79,6 +79,8 @@ install -m 0755 "$repo_root/system_files/usr/libexec/win1-brightness-write" /usr
 install -m 0755 "$repo_root/system_files/usr/libexec/win1-decky-hotkey" /usr/local/libexec/
 install -m 0644 "$repo_root/system_files/usr/libexec/win1-focus-running-game.js" /usr/local/libexec/
 install -m 0644 "$repo_root/system_files/usr/libexec/win1-focus-steam-qam.js" /usr/local/libexec/
+install -m 0644 "$repo_root/system_files/usr/libexec/win1-steam-background.js" /usr/local/libexec/
+install -m 0755 "$repo_root/system_files/usr/libexec/win1-steam-background-freezer" /usr/local/libexec/
 install -m 0755 "$repo_root/system_files/usr/libexec/win1-i915-watch" /usr/local/libexec/
 install -m 0755 "$repo_root/system_files/usr/libexec/win1-lid-event-guard" /usr/local/libexec/
 install -m 0755 "$repo_root/system_files/usr/libexec/win1-lid-state" /usr/local/libexec/
@@ -99,9 +101,10 @@ sed \
     -e 's#/usr/libexec/win1-i915-watch#/usr/local/libexec/win1-i915-watch#g' \
     "$repo_root/system_files/etc/systemd/system/win1-i915-watch.service" \
     > /etc/systemd/system/win1-i915-watch.service
-install -d -m 0755 /etc/systemd/logind.conf.d /etc/systemd/coredump.conf.d
+install -d -m 0755 /etc/systemd/logind.conf.d /etc/systemd/coredump.conf.d /etc/modules-load.d
 install -m 0644 "$repo_root/system_files/etc/systemd/logind.conf.d/20-win1-power.conf" /etc/systemd/logind.conf.d/
 install -m 0644 "$repo_root/system_files/etc/systemd/coredump.conf.d/90-win1.conf" /etc/systemd/coredump.conf.d/
+install -m 0644 "$repo_root/system_files/etc/modules-load.d/win1-steam-input.conf" /etc/modules-load.d/
 install -d -m 0755 /etc/systemd/system-sleep /etc/udev/rules.d
 sed \
     -e 's#/usr/libexec/win1-lid-state#/usr/local/libexec/win1-lid-state#g' \
@@ -109,6 +112,7 @@ sed \
     > /etc/systemd/system-sleep/50-win1-lid-guard
 chmod 0755 /etc/systemd/system-sleep/50-win1-lid-guard
 install -m 0644 "$repo_root/system_files/etc/udev/rules.d/80-win1-usb-wakeup.rules" /etc/udev/rules.d/
+install -m 0644 "$repo_root/system_files/etc/udev/rules.d/70-win1-steam-input.rules" /etc/udev/rules.d/
 
 sed \
     -e 's#/usr/libexec/win1-gaming-session#/usr/local/libexec/win1-gaming-session#g' \
@@ -161,6 +165,8 @@ fi
 
 systemctl daemon-reload
 udevadm control --reload
+modprobe uinput
+udevadm trigger --action=add --name-match=uinput
 systemctl enable --now win1-lid-event-guard.service
 systemctl enable --now win1-volume-keys.service
 systemctl enable --now win1-decky-hotkey.service

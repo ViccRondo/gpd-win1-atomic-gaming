@@ -32,14 +32,54 @@ done
 # 1024 frames removed underruns without the obvious latency of 2048 frames.
 pw-metadata -n settings 0 clock.force-quantum 1024 >/dev/null 2>&1 || true
 
+libexec_dir="$(cd -- "$(dirname -- "$0")" && pwd)"
+
 cleanup() {
     if [[ -n "${power_watcher_pid:-}" ]]; then
         kill "$power_watcher_pid" 2>/dev/null || true
         wait "$power_watcher_pid" 2>/dev/null || true
     fi
+    if [[ -n "${background_freezer_pid:-}" ]]; then
+        kill "$background_freezer_pid" 2>/dev/null || true
+        wait "$background_freezer_pid" 2>/dev/null || true
+    fi
+    if [[ -n "${kwin_script_loader_pid:-}" ]]; then
+        kill "$kwin_script_loader_pid" 2>/dev/null || true
+        wait "$kwin_script_loader_pid" 2>/dev/null || true
+    fi
     pw-metadata -n settings 0 clock.force-quantum 0 >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
+
+load_steam_background_script() {
+    for _ in {1..20}; do
+        gdbus call --session \
+            --dest org.kde.KWin \
+            --object-path /Scripting \
+            --method org.kde.kwin.Scripting.unloadScript \
+            win1-steam-background >/dev/null 2>&1 || true
+        if gdbus call --session \
+            --dest org.kde.KWin \
+            --object-path /Scripting \
+            --method org.kde.kwin.Scripting.loadScript \
+            "$libexec_dir/win1-steam-background.js" \
+            win1-steam-background >/dev/null 2>&1; then
+            gdbus call --session \
+                --dest org.kde.KWin \
+                --object-path /Scripting \
+                --method org.kde.kwin.Scripting.start >/dev/null 2>&1 || true
+            return
+        fi
+        sleep 0.25
+    done
+}
+
+load_steam_background_script &
+kwin_script_loader_pid=$!
+systemctl --user stop win1-steam-background-freezer-current.service \
+    >/dev/null 2>&1 || true
+"$libexec_dir/win1-steam-background-freezer" &
+background_freezer_pid=$!
 
 steam_data_dir="$HOME/.var/app/com.valvesoftware.Steam/.local/share/Steam"
 reboot_sentinel="$steam_data_dir/.steamos-reboot-sentinel"
@@ -50,7 +90,6 @@ export STEAMOS_STEAM_SHUTDOWN_SENTINEL="/var/home/$USER/.steam/steam/.steamos-sh
 rm -f "$reboot_sentinel" "$shutdown_sentinel"
 
 watch_power_requests() {
-    libexec_dir="$(cd -- "$(dirname -- "$0")" && pwd)"
     while true; do
         if [[ -e "$reboot_sentinel" ]]; then
             rm -f "$reboot_sentinel"
@@ -75,7 +114,6 @@ flatpak run \
     --env=PATH="$HOME/.steam/steam/win1-system-bin:/app/bin:/app/utils/bin:/usr/bin" \
     com.valvesoftware.Steam \
     -gamepadui \
-    -steamos3 \
     -cef-use-gl=egl
 
 if [[ -e "$reboot_sentinel" ]]; then

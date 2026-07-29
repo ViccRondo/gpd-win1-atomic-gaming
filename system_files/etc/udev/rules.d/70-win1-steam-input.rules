@@ -1,0 +1,4 @@
+# Steam Input needs uinput to translate controller buttons into keyboard and
+# mouse events in the Wayland gaming session. Grant the active seat user access
+# without making the device world-writable.
+KERNEL=="uinput", SUBSYSTEM=="misc", OPTIONS+="static_node=uinput", MODE="0660", GROUP="input", TAG+="uaccess"
